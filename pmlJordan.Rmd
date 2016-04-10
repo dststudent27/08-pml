@@ -1,0 +1,159 @@
+---
+title: "Practical Machine Learning Project"
+author: "Louis Jordan"
+date: "Sunday, April 10, 2016"
+output: html_document
+---
+
+### Executive Summary
+Participants in the Human Activity Recognition (HAR) Project were asked to
+perform various exercises correctly and incorrectly in 5 different ways.Using 
+performance data collected from accelerometers fed by multiple quantified self 
+movement devices, the goal of this project is to train a model that could be 
+used to predict the manner in which the participants performed the exercises.
+
+### Preliminaries
+Set Seed for Reproducibility  
+Load required libraries
+
+```{r setup, include = FALSE}
+      knitr::opts_chunk$set(cache = TRUE)
+```
+
+
+```{r seed, echo = TRUE, message = FALSE}
+      set.seed(212061996)
+      library(caret)
+```
+
+#### Load the Data Sets
+```{r load, echo = TRUE, message = FALSE}
+      trainChunk <- read.csv("pmlTrain.csv", header = TRUE, stringsAsFactors = FALSE, 
+                       sep = ",", na.strings = c("NA", "", "#DIV/0!"))
+
+      testChunk <- read.csv("pmlTest.csv", header = TRUE, stringsAsFactors = FALSE, 
+                       sep = ",", na.strings = c("NA", "", "#DIV/0!"))
+
+      trainChunk$classe <- as.factor(trainChunk$classe)
+```
+
+#### Preprocess (Examine & Clean) the Data
+Remove missing values, irrelevant columns of data, and other items from the 
+data set that do not contribute to the scope of the project
+#### Examine the Data
+```{r examine, echo = TRUE, message = FALSE}
+      # summary(trainChunk)
+      # str(trainChunk)
+      dim(trainChunk)
+```
+
+#### Remove RowID Column
+```{r removeRowID, echo = TRUE, message = FALSE}
+      removeIDCol <- trainChunk[, -1]
+      processedTrainChunk <- removeIDCol
+      dim(processedTrainChunk)
+```
+
+#### Determine Missing Values
+```{r findNAs, echo = TRUE, message = FALSE}
+      NAs <- apply(processedTrainChunk, 2, 
+                  function(x) {
+                        sum(is.na(x))
+                        }
+                  )
+```
+
+#### Remove Missing Values
+```{r removeNAs, echo = TRUE, message = FALSE}
+      removeNAs <- processedTrainChunk[, which (NAs == 0)]
+      processedTrainChunk <- removeNAs
+      dim(processedTrainChunk)
+```
+
+#### Remove NZV Values
+```{r removeNZVs, echo = TRUE, message = FALSE}
+      removeNZV <- nearZeroVar(processedTrainChunk)
+      processedTrainChunk <- processedTrainChunk[, -removeNZV]
+      dim(processedTrainChunk)
+```
+
+#### Find & Remove Useless Predictors (features)
+```{r removeUseless, echo = TRUE, message = FALSE}
+      uselessPredictors <- grep("cvtd_timestamp|X|user_name|num_window", 
+                                names (trainChunk))
+      processedTrainChunk <- processedTrainChunk[, -uselessPredictors]
+      dim(processedTrainChunk)
+```
+
+### Define Data Partitions
+#### Create Training and Test Data Sets
+```{r createDataSets, echo = TRUE, message = FALSE}
+      inTrain <- createDataPartition(y = trainChunk$classe, p = 0.20, list = FALSE)
+      trainSubset <- processedTrainChunk[inTrain, ]
+      dim(trainSubset)
+      # create test data for future use in cross validation
+      testSubset <- processedTrainChunk[-inTrain, ] 
+      dim(testSubset)
+```
+
+### Define & Fit the Model; Display Accuracy of the Model
+#### Set Parameters of Train Control & Fit Using Random Forest Algorithm
+```{r defineModel, echo = TRUE, message = FALSE}
+      ctrl <- trainControl(method = "cv", number = 4, allowParallel = TRUE)
+      modelFit <- train(trainSubset$classe ~ ., data = trainSubset, method = "rf", 
+                prof = TRUE, trControl = ctrl)
+      modelFit
+      
+      # Display the Accuracy of the Model
+      resultsTR <- modelFit$results
+      round(max(resultsTR$Accuracy), 4) * 100
+```
+
+
+### Process the Test Data
+#### Load the test Data
+```{r processTestData, echo = FALSE, message = FALSE}
+      testChunk <- read.csv("pmlTest.csv", header = TRUE, stringsAsFactors = FALSE, 
+                      sep = ",", na.strings = c("NA", "", "#DIV/0!"))     
+```
+
+#### Remove RowID Column
+```{r remRowIDFromTest, echo = FALSE, message = FALSE}
+      removeIDCol <- testChunk[, -1]
+      processedTestChunk <- removeIDCol
+      dim(processedTestChunk)
+```
+
+#### Find & Remove Missing Values
+```{r remMissingFromTest, echo = FALSE, message = FALSE}
+      NAs <- apply(processedTestChunk, 2, function(x) {sum(is.na(x))})
+      removeNAs <- processedTestChunk[, which (NAs == 0)]
+      processedTestChunk <- removeNAs
+      dim(processedTestChunk)
+```
+
+#### Remove NZVs
+```{r removeNZVsTest, echo = FALSE, message = FALSE}
+      removeNZV <- nearZeroVar(processedTestChunk)
+      processedTestChunk <- processedTestChunk[, -removeNZV]
+      dim(processedTestChunk)
+```
+
+#### Remove Useless Predictors (features)
+```{r remUseless, echo = FALSE, message = FALSE}
+      uselessPredictors <- grep("cvtd_timestamp|X|user_name|num_window", 
+                                names (testChunk))
+      processedTestChunk <- processedTestChunk[, -uselessPredictors]
+      dim(processedTestChunk)
+
+      #testChunk$classe <- as.factor(testChunk$classe)
+      tester <- testChunk[ , which(names(testChunk) %in% names(processedTrainChunk))]
+```
+
+### Predictions Using the Test Data
+```{r predictions, echo = TRUE, message = FALSE}
+      tcPrediction <- predict(modelFit, tester, type = "raw")
+      tcPrediction
+```
+
+
