@@ -1,0 +1,156 @@
+---
+title: "Practical Machine Learning Project"
+author: "Louis Jordan"
+date: "Sunday, April 10, 2016"
+output: html_document
+---
+
+### Executive Summary
+Participants in the Human Activity Recognition (HAR) Project were asked to
+perform various exercises correctly and incorrectly in 5 different ways.Using 
+performance data collected from accelerometers fed by multiple quantified self 
+movement devices, the goal of this project is to train a model that could be 
+used to predict the manner in which the participants performed the exercises.
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.  
+The training data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv  
+The test data for this project are available here: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv  
+
+```{r seed, echo = FALSE, message = TRUE}
+      print(currentDate <- date())
+```
+
+### Preliminaries
+Set Seed for Reproducibility  
+Load Required Libraries
+
+```{r seed, echo = TRUE, message = FALSE}
+      set.seed(212061996)
+      library(caret)
+      library(gmodels)
+      library(randomForest)
+```
+
+Load the Data Sets
+```{r load, echo = TRUE, message = FALSE}
+      trainChunk <- read.csv("pmlTrain.csv", header = TRUE, stringsAsFactors = FALSE, 
+                       sep = ",", na.strings = c("NA", "", "#DIV/0!"))
+
+      testChunk <- read.csv("pmlTest.csv", header = TRUE, stringsAsFactors = FALSE, 
+                       sep = ",", na.strings = c("NA", "", "#DIV/0!"))
+
+      trainChunk$classe <- as.factor(trainChunk$classe)
+```
+
+#### Preprocess (Examine & Clean) the Data
+Remove missing values, irrelevant columns of data, and other items from the 
+data set that do not contribute to the scope of the project
+
+#### Examine the Data
+```{r examine, echo = TRUE, message = TRUE}
+      # summary(trainChunk)
+      # str(trainChunk)
+      dim(trainChunk)
+```
+
+Remove RowID Column
+```{r removeRowID, echo = TRUE, message = FALSE}
+      removeIDCol <- trainChunk[, -1]
+      processedTrainChunk <- removeIDCol
+      dim(processedTrainChunk)
+```
+
+Find & Remove Missing Values
+```{r findRemNAs, echo = TRUE, message = FALSE}
+      NAs <- apply(processedTrainChunk, 2, function(x) {sum(is.na(x))})
+      removeNAs <- processedTrainChunk[, which (NAs == 0)]
+      processedTrainChunk <- removeNAs
+      dim(processedTrainChunk)
+```
+
+Remove NZV Values
+```{r removeNZVs, echo = TRUE, message = FALSE}
+      removeNZV <- nearZeroVar(processedTrainChunk)
+      processedTrainChunk <- processedTrainChunk[, -removeNZV]
+      dim(processedTrainChunk)
+```
+
+Find & Remove Useless Predictors (features)
+```{r removeUseless, echo = TRUE, message = FALSE}
+      uselessPredictors <- grep("cvtd_timestamp|X|user_name|num_window", 
+                                names (trainChunk))
+      processedTrainChunk <- processedTrainChunk[, -uselessPredictors]
+      dim(processedTrainChunk)
+```
+
+### Define Data Partitions
+Partition Training Data into Training and Validating Data Subsets
+```{r createDataSets, echo = TRUE, message = TRUE}
+      inTrain <- createDataPartition(y = trainChunk$classe, p = 0.25, list = FALSE)
+      training <- processedTrainChunk[inTrain, ]
+      dim(training)
+      # create test data for future use in cross validation
+      validating <- processedTrainChunk[-inTrain, ] 
+      dim(validating)
+```
+
+### Modeling
+Fit the Model Using the Random Forest Algorithm (5-fold cross validation) 
+```{r modeling, echo = TRUE, message = TRUE}
+      ctrl <- trainControl(method = "cv", number = 5, allowParallel = TRUE)
+      myModel <- train(training$classe ~ ., data = training, method = "rf", 
+                prof = TRUE, trControl = ctrl)
+      myModel
+```
+
+### Evaluate the Model
+```{r evaluateModel1, echo = TRUE, message = TRUE}
+      cvPrediction <- predict(myModel, newdata = validating)
+      confusionMatrix(cvPrediction, validating$classe)
+```    
+
+```{r evaluateModel2, echo = TRUE, message = TRUE}
+      cvPrediction <- predict(myModel, newdata = validating)
+      accuraccy <- c(as.numeric(cvPrediction == validating$classe))
+      accuraccy <- sum(accuraccy) * 100/nrow(validating)
+      oosError <- 100 - accuraccy
+```      
+
+The CrossTable function of the gmodels package yields a more detailed confusion matrix.
+```{r evaluateModel3, echo = TRUE, message = TRUE}
+      CrossTable(cvPrediction, validating$classe)
+      
+```
+
+
+### Predictions
+Predict on Test Data & Write to File
+```{r predictions, echo = TRUE, message = TRUE}
+      tcPrediction <- predict(myModel, testChunk, type = "raw") 
+      tcPrediction
+
+      pml_write_files = function(x){
+            n = length(x)
+            for(i in 1:n) {
+                  filename = paste0("problem_id_", i, ".txt")
+                  write.table(x[i], file = filename, quote = FALSE, row.names = FALSE,
+                              col.names = FALSE)
+            }
+      }
+
+      pml_write_files(tcPrediction)
+   
+```
+
+
+### Conclusion
+The kappa statistic ranges from 0 to 1, inclusive, with 1 indicating perfect agreement between the model's prediction and the true values.  Though the interpretation can be subjective, generally speaking, a good agreement typically ranges between 0.60 - 0.80.
+
+The model accuracccy is `r round(accuraccy, 2)` %.  
+The out-of-sample error is `r round(oosError, 2)` %.  
+The kappa value is 0.97.  
+
+```{r endTime, echo = FALSE, message = TRUE}
+      print(currentDate <- date())
+
+```
